@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pimp Simulator — PWA</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0b0f17;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      padding: 14px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      object-fit: cover;
+      border: 1px solid #f59e0b;
+    }
+    .brand h1 { font-size: 1.1rem; font-weight: 700; }
+    .brand p { font-size: 0.8rem; color: #94a3b8; }
+    .hud {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+    }
+    .pill {
+      background: #1e293b;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .canvas-wrap {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      background: #090d16;
+      border-radius: 10px;
+      display: block;
+    }
+    .controls-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+    }
+    button {
+      background: #f59e0b;
+      color: #090d16;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #334155;
+    }
+    aside {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    aside h2 { font-size: 1rem; border-bottom: 1px solid #1e293b; padding-bottom: 8px; }
+    .log {
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .staff-item {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="icon-192.png" alt="Pimp Simulator İkon" />
+      <div>
+        <h1>Pimp Simulator</h1>
+        <p>PWA İşletme ve Yaşam Simülasyonu</p>
+      </div>
+    </div>
+    <div class="hud">
+      <div class="pill" id="hud-cash">Kasa: $1.500</div>
+      <div class="pill" id="hud-rep">İtibar: 15</div>
+      <div class="pill" id="hud-staff">Kadro: 0/20</div>
+      <div class="pill" id="hud-time">Gün 1 • 09:00</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="canvas-wrap">
+      <canvas id="gameCanvas" width="960" height="540"></canvas>
+      <div class="controls-bar">
+        <span>WASD / Ok Tuşları: Hareket • Altın Adaya Yaklaş ve <b>E</b> veya Butona Bas: Adayla Pazarlık Yap</span>
+        <div style="display:flex; gap:8px;">
+          <button id="btn-interact">Etkileşim (E)</button>
+          <button class="secondary" id="btn-save">Kaydet</button>
+          <button class="secondary" id="btn-load">Yükle</button>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <h2>Kadro ve Durum</h2>
+      <div id="staff-list">Henüz sözleşmeli çalışan yok.</div>
+      <h2>Olay Günlüğü</h2>
+      <div class="log" id="event-log"></div>
+    </aside>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "pimp_simulator_pwa_save_v1";
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const state = {
+      cash: 1500,
+      reputation: 15,
+      day: 1,
+      minutes: 9 * 60,
+      player: { x: 160, y: 270, speed: 3.2 },
+      candidate: { x: 640, y: 270, name: "Elif (Bilocan)", age: 24, commission: 55, active: true },
+      staff: [],
+      logs: ["PWA sürümü başlatıldı. Şehirde aday ile etkileşime geçebilirsin."]
+    };
+
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      keys[e.key.toLowerCase()] = true;
+      if (e.key.toLowerCase() === "e") interact();
+    });
+    window.addEventListener("keyup", (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    function addLog(msg) {
+      state.logs.unshift(msg);
+      if (state.logs.length > 25) state.logs.pop();
+      renderLog();
+    }
+
+    function interact() {
+      if (!state.candidate.active) {
+        addLog("Yeni aday gün içinde bölgede görünecek.");
+        return;
+      }
+      const dx = state.player.x - state.candidate.x;
+      const dy = state.player.y - state.candidate.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 85) {
+        addLog("Adayla konuşmak için biraz daha yaklaşmalısın.");
+        return;
+      }
+      if (state.staff.length >= 20) {
+        addLog("Maksimum 20 çalışan kapasitesine ulaşıldı.");
+        return;
+      }
+      state.staff.push({
+        name: state.candidate.name,
+        age: state.candidate.age,
+        commission: state.candidate.commission,
+        earned: 0
+      });
+      state.candidate.active = false;
+      addLog(`${state.candidate.name} (%${state.candidate.commission} çalışan payı) ile gönüllü anlaşma imzalandı.`);
+      renderUI();
+    }
+
+    function saveGame() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      addLog("Oyun tarayıcı kaydına alındı.");
+    }
+
+    function loadGame() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        addLog("Kayıtlı veri bulunamadı.");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        Object.assign(state, parsed);
+        addLog("Kayıtlı oyun başarıyla yüklendi.");
+        renderUI();
+      } catch {
+        addLog("Kayıt verisi okunamadı.");
+      }
+    }
+
+    function formatTime(totalMins) {
+      const m = totalMins % (24 * 60);
+      const hh = String(Math.floor(m / 60)).padStart(2, "0");
+      const mm = String(m % 60).padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
+
+    function renderUI() {
+      document.getElementById("hud-cash").textContent = `Kasa: $${state.cash.toLocaleString("tr-TR")}`;
+      document.getElementById("hud-rep").textContent = `İtibar: ${state.reputation}`;
+      document.getElementById("hud-staff").textContent = `Kadro: ${state.staff.length}/20`;
+      document.getElementById("hud-time").textContent = `Gün ${state.day} • ${formatTime(state.minutes)}`;
+
+      const staffEl = document.getElementById("staff-list");
+      if (state.staff.length === 0) {
+        staffEl.textContent = "Henüz sözleşmeli çalışan yok.";
+      } else {
+        staffEl.innerHTML = state.staff
+          .map((s) => `<div class="staff-item"><span>${s.name}</span><span>%${s.commission} • $${s.earned}</span></div>`)
+          .join("");
+      }
+    }
+
+    function renderLog() {
+      const logEl = document.getElementById("event-log");
+      logEl.innerHTML = state.logs.map((l) => `<div>• ${l}</div>`).join("");
+    }
+
+    let tickCounter = 0;
+    function loop() {
+      if (keys["w"] || keys["arrowup"]) state.player.y -= state.player.speed;
+      if (keys["s"] || keys["arrowdown"]) state.player.y += state.player.speed;
+      if (keys["a"] || keys["arrowleft"]) state.player.x -= state.player.speed;
+      if (keys["d"] || keys["arrowright"]) state.player.x += state.player.speed;
+
+      state.player.x = Math.max(24, Math.min(canvas.width - 24, state.player.x));
+      state.player.y = Math.max(24, Math.min(canvas.height - 24, state.player.y));
+
+      tickCounter++;
+      if (tickCounter % 60 === 0) {
+        state.minutes += 5;
+        if (state.minutes >= 24 * 60) {
+          state.minutes = 0;
+          state.day += 1;
+          if (!state.candidate.active) {
+            state.candidate.active = true;
+            addLog("Yeni günde şehirde yeni bir aday keşfedilebilir durumda.");
+          }
+        }
+        if (state.staff.length > 0 && tickCounter % 180 === 0) {
+          const baseDeal = 400;
+          state.staff.forEach((s) => {
+            const empShare = Math.round(baseDeal * (s.commission / 100));
+            const clubShare = baseDeal - empShare;
+            s.earned += empShare;
+            state.cash += clubShare;
+          });
+          state.reputation = Math.min(100, state.reputation + 1);
+          addLog("Tamamlanan görüşmelerden işletme kasasına komisyon aktarıldı.");
+        }
+        renderUI();
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 60) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 60) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      ctx.fillStyle = "#172554";
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.fillRect(60, 70, 190, 120);
+      ctx.strokeRect(60, 70, 190, 120);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText("İŞLETME MERKEZİ", 92, 135);
+
+      if (state.candidate.active) {
+        ctx.fillStyle = "#fbbf24";
+        ctx.beginPath();
+        ctx.arc(state.candidate.x, state.candidate.y, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fde68a";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(`${state.candidate.name} (%${state.candidate.commission})`, state.candidate.x - 52, state.candidate.y - 22);
+      }
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.beginPath();
+      ctx.arc(state.player.x, state.player.y, 15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#bae6fd";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("Oyuncu", state.player.x - 22, state.player.y - 22);
+
+      requestAnimationFrame(loop);
+    }
+
+    document.getElementById("btn-interact").addEventListener("click", interact);
+    document.getElementById("btn-save").addEventListener("click", saveGame);
+    document.getElementById("btn-load").addEventListener("click", loadGame);
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      });
+    }
+
+    renderUI();
+    renderLog();
+    loop();
+  </script>
+</body>
+</html>
